@@ -60,6 +60,7 @@
 | วันที่ | เวอร์ชัน | เปลี่ยนอะไร | ใครอนุมัติ |
 |---|---|---|---|
 | 2026-09-25 | v1.0 | สร้างเอกสารชุดแรก: เนื้อหา, requirement, stack (Cloudflare แทน Supabase), แผนงานหลัง Midterm | ทีม MedicSync |
+| 2026-10-16 | v1.1 | เพิ่ม `r3f-perf` เป็น **devDependency** (วัด fps/draw calls หน้า 3D ด้วย `?perf` · ไม่อยู่ใน production bundle) · Sarcomere: ค่าความยาวเฉลี่ยตามตำรา (thick 1.6 µm, thin 1.0 µm, 2.5 → 2.0 µm), titin Z disc → M line, 8 ชิ้นส่วนรวม titin + nebulin | user (ผู้รับผิดชอบ 3D) |
 
 ---
 
