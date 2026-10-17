@@ -76,6 +76,7 @@ export function CrossBridgeModel({ level, selected, onSelect, reducedMotion, tim
 
 function Scene({ data, level, selected, onSelect, reducedMotion, timeline }: CrossBridgeProps & { data: Data }) {
   const controls = useThree((s) => s.controls) as CameraControls | null;
+  const portrait = useThree((s) => s.size.width < s.size.height);
   const invalidate = useThree((s) => s.invalidate);
   const playing = useTimelinePlaying(timeline);
 
@@ -280,9 +281,9 @@ function Scene({ data, level, selected, onSelect, reducedMotion, timeline }: Cro
     if (!controls) return;
     // look from the front, a little above: thin filament on top, thick filament below, heads in between
     controls.setLookAt(0.4, 0.35, 6, 0, -0.62, 0, false);
-    void controls.fitToSphere(new Sphere(new Vector3(0, -0.62, 0), 1.35), !reducedMotion);
+    void controls.fitToSphere(new Sphere(new Vector3(0, -0.62, 0), portrait ? 1.9 : 1.35), !reducedMotion);
     invalidate();
-  }, [controls, reducedMotion, invalidate]);
+  }, [controls, portrait, reducedMotion, invalidate]);
 
   // selection glow per kind
   useEffect(() => {
