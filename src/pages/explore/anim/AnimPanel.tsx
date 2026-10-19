@@ -1,10 +1,13 @@
 import type { LevelAnim } from "@/content/exploreAnims";
 import { animStarts } from "@/content/exploreAnims";
-import { useTimelinePlaying, useTimelineStep, type Timeline } from "./timeline";
+import { useEffect, useRef } from "react";
+import { bandsAt } from "../sarcomere/model";
+import { sarcomereContraction, useTimelinePlaying, useTimelineStep, type Timeline } from "./timeline";
 
 /**
  * Controls + captions for a level animation: play/pause, restart, one chip per step (tap = jump there) and the
  * current step's text with its lecture-sheet section. Keyboard reachable; the caption is a polite live region.
+ * Steps that rest on the team document only carry an "awaiting review" badge (rule R6).
  */
 export function AnimPanel({ anim, tl, reducedMotion }: { anim: LevelAnim; tl: Timeline; reducedMotion: boolean }) {
   const starts = animStarts(anim);
@@ -56,13 +59,48 @@ export function AnimPanel({ anim, tl, reducedMotion }: { anim: LevelAnim; tl: Ti
               }
             >
               {s.title}
+              {s.pending && (
+                <span aria-label="(awaiting review)" title="Awaiting lecturer review">
+                  {" "}
+                  *
+                </span>
+              )}
             </button>
           </li>
         ))}
       </ol>
       <p aria-live="polite" className="mt-3 text-[15px] leading-6 text-[var(--c-text)]">
-        <strong>{step.title}.</strong> {step.text} <span className="coast-muted whitespace-nowrap text-[12.5px]">Lecture sheet {step.ref}</span>
+        <strong>{step.title}.</strong> {step.text}{" "}
+        {step.pending ? <PendingBadge /> : <span className="coast-muted whitespace-nowrap text-[12.5px]">Lecture sheet {step.ref}</span>}
       </p>
+      {anim.readout === "sarcomere" && <SarcomereReadout tl={tl} />}
     </section>
   );
+}
+
+/** Marks a statement that comes from the team document and is not in the lecture sheet yet. */
+export function PendingBadge() {
+  return (
+    <span
+      title="From the team document — not yet confirmed against the lecture sheet"
+      className="inline-block whitespace-nowrap rounded-full bg-amber-400/25 px-2 py-0.5 align-[1px] text-[11.5px] font-bold text-[var(--c-text)]"
+    >
+      Awaiting lecturer review
+    </span>
+  );
+}
+
+/** Live band lengths while the sarcomere slides (updates the text directly — no re-render per frame). */
+function SarcomereReadout({ tl }: { tl: Timeline }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    const write = () => {
+      const b = bandsAt(sarcomereContraction(tl.t));
+      if (ref.current)
+        ref.current.textContent = `Sarcomere ${b.sarcomere.toFixed(2)} µm · A band ${b.aBand.toFixed(2)} µm · I band ${b.iBand.toFixed(2)} µm · H zone ${b.hZone.toFixed(2)} µm`;
+    };
+    write();
+    return tl.subscribe(write);
+  }, [tl]);
+  return <p ref={ref} className="coast-muted mt-2 font-mono text-[12.5px] tabular-nums" />;
 }

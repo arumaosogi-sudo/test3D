@@ -10,14 +10,14 @@ import {
   CanvasTexture,
   Color,
   Mesh,
+  Quaternion,
   Vector3,
   type MeshStandardMaterial,
   type Object3D,
   type Points,
 } from "three";
 import type { LevelId } from "@/content/exploreZoom";
-import { pulse, ramp, type Timeline } from "../anim/timeline";
-import { CONTRACTED_UM, RELAXED_UM } from "../sarcomere/model";
+import { pulse, ramp, sarcomereContraction, type Timeline } from "../anim/timeline";
 
 /**
  * Per-level animations driven by a Timeline (t: 0 → 1). Each one only touches its own meshes / helper objects and
@@ -36,22 +36,35 @@ export type AnimCtx = {
 
 export function LevelAnimation({ level, ...ctx }: AnimCtx & { level: LevelId }) {
   switch (level) {
+    case "muscle":
+      return <WholeMuscle {...ctx} />;
+    case "fascicle":
+      return <FascicleLayers {...ctx} />;
     case "fiber":
       return <FiberExcitation {...ctx} />;
-    case "arm":
-      return <ElbowFlexion {...ctx} />;
-    case "heart":
-      return <HeartBeat {...ctx} />;
-    case "cardiac":
-      return <CardiacWave {...ctx} />;
+    case "myofibril":
+    case "cardiacmyofibril":
+      return <MyofibrilContraction {...ctx} />;
     case "sarcomere":
-      return <SlidingFilaments {...ctx} />;
-    case "fascicle":
-      return <MotorUnit {...ctx} />;
+      return <MyofibrilContraction {...ctx} curve={sarcomereContraction} />;
+    case "filaments":
+      return <MyofilamentCycle {...ctx} />;
+    case "heartwall":
+      return <HeartWall {...ctx} />;
+    case "cardiactissue":
+      return <CardiacWave {...ctx} />;
+    case "cardiomyocyte":
+      return <CardiomyocyteExcitation {...ctx} />;
+    case "gutwall":
+      return <GutWall {...ctx} />;
     case "smoothtissue":
       return <SmoothTissue {...ctx} />;
     case "smoothcell":
       return <SmoothCell {...ctx} />;
+    case "densebodies":
+      return <DenseBodyContraction {...ctx} />;
+    case "smoothfilaments":
+      return <SmoothMyofilamentCycle {...ctx} />;
     default:
       return null;
   }
@@ -177,17 +190,17 @@ function FiberExcitation({ root, meshes, tl, keyOf, size }: AnimCtx) {
   useFrame(() => {
     const t = tl.t;
     // 1 · action potential runs down the axon
-    const run = ramp(t, 0.02, 0.2);
+    const run = ramp(t, 0.01, 0.12);
     if (ap.current) {
-      ap.current.visible = t > 0.01 && t < 0.24;
+      ap.current.visible = t > 0.005 && t < 0.14;
       ap.current.position.lerpVectors(parts.top, parts.end, run);
     }
-    glow(parts.axon, 0.15 + 0.6 * pulse(t, 0.0, 0.3), AP_YELLOW);
+    glow(parts.axon, 0.15 + 0.6 * pulse(t, 0.0, 0.2), AP_YELLOW);
 
     // 2 · ACh vesicles empty into the cleft and diffuse to the sarcolemma
     if (ach.current) {
-      const go = ramp(t, 0.2, 0.38);
-      ach.current.visible = t > 0.16 && t < 0.46;
+      const go = ramp(t, 0.12, 0.24);
+      ach.current.visible = t > 0.1 && t < 0.3;
       const arr = achGeo.getAttribute("position") as BufferAttribute;
       parts.vesicles.forEach((off, i) => {
         v.copy(parts.end)
@@ -199,15 +212,15 @@ function FiberExcitation({ root, meshes, tl, keyOf, size }: AnimCtx) {
     }
 
     // 3 · muscle action potential along the sarcolemma, then into the T-tubules
-    glow(parts.sarcolemma, 0.55 * pulse(t, 0.36, 0.62), AP_YELLOW);
-    glow(parts.tTubules, 0.9 * pulse(t, 0.44, 0.74), T_BLUE);
+    glow(parts.sarcolemma, 0.55 * pulse(t, 0.22, 0.48), AP_YELLOW);
+    glow(parts.tTubules, 0.9 * pulse(t, 0.4, 0.64), T_BLUE);
 
     // 4 · terminal cisternae / SR release Ca²⁺ into the sarcoplasm
-    glow(parts.cisternae, 0.8 * pulse(t, 0.58, 0.82), CA_LIME);
-    glow(parts.sr, 0.4 * pulse(t, 0.58, 0.85), CA_LIME);
+    glow(parts.cisternae, 0.8 * pulse(t, 0.56, 0.8), CA_LIME);
+    glow(parts.sr, 0.4 * pulse(t, 0.56, 0.84), CA_LIME);
     if (ca.current) {
-      const out = ramp(t, 0.6, 0.9);
-      ca.current.visible = t > 0.6;
+      const out = ramp(t, 0.58, 0.88);
+      ca.current.visible = t > 0.58;
       const arr = caGeo.getAttribute("position") as BufferAttribute;
       parts.caFrom.forEach((p, i) => {
         v.copy(p).addScaledVector(parts.caDir[i], out * size * 0.05 * (0.4 + rand(i + 7)));
@@ -217,7 +230,7 @@ function FiberExcitation({ root, meshes, tl, keyOf, size }: AnimCtx) {
       (ca.current.material as { opacity: number }).opacity = 1 - ramp(t, 0.93, 1);
     }
     // Ca²⁺ reaches the myofibrils
-    glow(parts.myofibrils, 0.25 * pulse(t, 0.8, 1), CA_LIME);
+    glow(parts.myofibrils, 0.35 * pulse(t, 0.8, 1), CA_LIME);
   });
 
   const dot = size * 0.012;
@@ -238,15 +251,16 @@ function FiberExcitation({ root, meshes, tl, keyOf, size }: AnimCtx) {
   );
 }
 
-// ---------- arm: elbow flexion (biceps) and extension (triceps) — lecture §1.1, §2.4 ----------
+// ---------- whole muscle: epimysium, then the biceps bends the elbow and the triceps straightens it (§3.2, §1.1, §2.4) ----------
 const ACTIVE = new Color("#ff5a3c");
+const WRAP = new Color("#e0f2fe");
 
-function ElbowFlexion({ root, meshes, clips, tl, keyOf }: AnimCtx) {
-  // the export has one clip for the rig and one per biceps head (shape key "Contract"); all share one length
+function WholeMuscle({ root, meshes, clips, tl, keyOf }: AnimCtx) {
+  // one clip for the rig + one per shape-keyed mesh (biceps heads and their epimysium copies); all the same length,
+  // each going 0 → 120° flexion → 0
   const { mixer, actions } = useMemo(() => {
     const mixer = new AnimationMixer(root);
-    const actions = clips.map((c) => mixer.clipAction(c));
-    return { mixer, actions };
+    return { mixer, actions: clips.map((c) => mixer.clipAction(c)) };
   }, [root, clips]);
   // start in an effect (and stop in its cleanup) so a StrictMode remount re-starts the actions
   useEffect(() => {
@@ -258,16 +272,26 @@ function ElbowFlexion({ root, meshes, clips, tl, keyOf }: AnimCtx) {
 
   const biceps = useMemo(() => meshes.filter((m) => keyOf(m).includes("biceps brachii")), [meshes, keyOf]);
   const triceps = useMemo(() => meshes.filter((m) => keyOf(m).includes("triceps brachii")), [meshes, keyOf]);
+  // the scene already made the epimysium see-through; fade from that opacity
+  const epi = useMemo(
+    () => meshesNamed(meshes, keyOf, "Epimysium").map((m) => ({ m, mat: m.material as MeshStandardMaterial, base: (m.material as MeshStandardMaterial).opacity })),
+    [meshes, keyOf],
+  );
 
   useFrame(() => {
     const t = tl.t;
-    // the clip is 0 → 120° flexion → 0 over its length; the timeline maps straight onto it
+    // 0–0.22 the epimysium wraps the muscle · 0.22–0.4 it fades so the muscle shows · 0.4–0.7 flex · 0.7–1 extend
     // (set the action's own time; a paused action ignores the mixer clock)
-    for (const a of actions) a.time = t * a.getClip().duration;
+    const u = ramp(t, 0.4, 0.97);
+    for (const a of actions) a.time = u * a.getClip().duration;
     mixer.update(0);
-    // the muscle doing the work glows: biceps while the elbow bends, triceps while it straightens
-    glow(biceps, 0.55 * pulse(t, 0, 0.5), ACTIVE);
-    glow(triceps, 0.55 * pulse(t, 0.5, 1), ACTIVE);
+    const show = 1 - ramp(t, 0.22, 0.36);
+    epi.forEach((e) => (e.mat.opacity = e.base * (0.3 + 0.7 * show)));
+    glow(
+      epi.map((e) => e.m),
+      0.6 * pulse(t, 0, 0.24), WRAP);
+    glow(biceps, 0.55 * pulse(t, 0.38, 0.72), ACTIVE);
+    glow(triceps, 0.55 * pulse(t, 0.68, 1), ACTIVE);
   });
   return null;
 }
@@ -302,10 +326,10 @@ const meshesUnder = (o: Object3D) => {
   return out;
 };
 
-// ---------- heart: continuous rhythmic contraction (lecture §14) ----------
+// ---------- heart wall: the heart beats; the myocardium is the layer doing the work (§14) ----------
 const BEAT = new Color("#ff6b5b");
 
-function HeartBeat({ root, tl }: AnimCtx) {
+function HeartWall({ root, meshes, tl, keyOf }: AnimCtx) {
   const parts = useMemo(() => {
     const pick = (re: RegExp) => {
       const out: Pulsable[] = [];
@@ -315,14 +339,15 @@ function HeartBeat({ root, tl }: AnimCtx) {
       });
       return out;
     };
-    return { atria: pick(/atrium/), ventricles: pick(/ventricle/) };
-  }, [root]);
+    return { atria: pick(/atrium/), ventricles: pick(/ventricle/), myocardium: meshesNamed(meshes, keyOf, "Myocardium") };
+  }, [root, meshes, keyOf]);
 
   useFrame(() => {
-    // t covers one beat: the upper chambers squeeze a little first, then the lower ones, then everything relaxes
     const t = tl.t;
-    const a = pulse(t, 0.0, 0.32);
-    const v = pulse(t, 0.25, 0.7);
+    // two beats per loop: the upper chambers squeeze a little first, then the lower ones, then everything relaxes
+    const beat = (t * 2) % 1;
+    const a = pulse(beat, 0.0, 0.32);
+    const v = pulse(beat, 0.25, 0.7);
     parts.atria.forEach((p) => setScale(p, 1 - 0.06 * a));
     parts.ventricles.forEach((p) => setScale(p, 1 - 0.08 * v));
     glow(
@@ -335,6 +360,7 @@ function HeartBeat({ root, tl }: AnimCtx) {
       0.35 * v,
       BEAT,
     );
+    glow(parts.myocardium, Math.max(0.4 * v, 0.6 * pulse(t, 0.28, 0.62)), BEAT);
   });
   return null;
 }
@@ -344,28 +370,39 @@ const SIGNAL = new Color("#fde047");
 
 function CardiacWave({ root, tl }: AnimCtx) {
   const parts = useMemo(() => {
-    const cells = nodesNamed(root, "Cardiac muscle cells.").map((n) => pulsable(n));
+    root.updateMatrixWorld(true);
+    const centre = new Box3().setFromObject(root).getCenter(new Vector3());
+    // each cell / disc carries the time the signal reaches it (extras "t", spreading from one corner); rescale to 0..1
+    const cells = nodesNamed(root, "Cardiac muscle cells.");
     const discs = nodesNamed(root, "Intercalated discs.");
-    return { cells, cellMeshes: cells.map((c) => meshesUnder(c.node)), discMeshes: discs.map(meshesUnder) };
+    const ts = [...cells, ...discs].map((n) => Number(n.userData.t ?? 0));
+    const lo = Math.min(...ts);
+    const span = Math.max(1e-3, Math.max(...ts) - lo);
+    const norm = (n: Object3D) => (Number(n.userData.t ?? 0) - lo) / span;
+    const whole = root.children.filter((c) => c.userData.name && !/^(hs_|anim_)/.test(String(c.userData.name)));
+    return {
+      cells: cells.map((n) => ({ ms: meshesUnder(n), t: norm(n) })),
+      discs: discs.map((n) => ({ ms: meshesUnder(n), t: norm(n) })),
+      nodes: whole.map((n) => pulsable(n, centre)),
+      capillaries: nodesNamed(root, "Capillaries").flatMap(meshesUnder),
+    };
   }, [root]);
-  // disc k sits between cells: 1|2, 2|3 (lower row) and 5|6, 6|7 (upper row); cell 4 is the branch
-  const DISC_AFTER = [0, 1, 4, 5];
 
   useFrame(() => {
     const t = tl.t;
-    const n = parts.cells.length;
-    parts.cells.forEach((c, i) => {
-      const on = 0.06 + (i / Math.max(1, n - 1)) * 0.44; // activation reaches cell i at this time
-      glow(parts.cellMeshes[i], 0.55 * pulse(t, on - 0.02, on + 0.16), SIGNAL);
-      // after activation the cells contract together (shorter, slightly thicker) and relax
-      const squeeze = ramp(t, 0.6, 0.72) * (1 - ramp(t, 0.85, 0.98));
-      setScale(c, [1 - 0.05 * squeeze, 1 + 0.02 * squeeze]);
+    // 0.2–0.6: the signal spreads cell to cell through the intercalated discs
+    parts.cells.forEach((c) => {
+      const on = 0.2 + c.t * 0.38;
+      glow(c.ms, 0.55 * pulse(t, on - 0.03, on + 0.14), SIGNAL);
     });
-    parts.discMeshes.forEach((ms, k) => {
-      const i = DISC_AFTER[k] ?? k;
-      const on = 0.06 + ((i + 0.5) / Math.max(1, n - 1)) * 0.44;
-      glow(ms, 1.2 * pulse(t, on - 0.03, on + 0.08), SIGNAL);
+    parts.discs.forEach((d) => {
+      const on = 0.2 + d.t * 0.38;
+      glow(d.ms, 1.2 * pulse(t, on - 0.03, on + 0.08), SIGNAL);
     });
+    // then the tissue contracts as one (shorter along the cells, slightly thicker) and relaxes
+    const squeeze = ramp(t, 0.6, 0.72) * (1 - ramp(t, 0.84, 0.97));
+    parts.nodes.forEach((n) => setScale(n, [1 - 0.06 * squeeze, 1 + 0.02 * squeeze]));
+    glow(parts.capillaries, 0.7 * pulse(t, 0.84, 1), BEAT);
   });
   return null;
 }
@@ -477,81 +514,421 @@ function SmoothCell({ root, meshes, tl, keyOf }: AnimCtx) {
   );
 }
 
-// ---------- sarcomere: thin filaments slide toward the M line, A band unchanged (lecture §12, §10.4) ----------
-const K_SARC = 4; // the model uses 1 µm = 4 units (see 3d-source/z2/build_levels.py)
+// ---------- fascicle: perimysium, endomysium, then the fibers contract and the wrappings go with them (§3.2, §2.5) ----------
+const WRAP_GLOW = new Color("#fef3c7");
 
-function SlidingFilaments({ root, tl }: AnimCtx) {
+function FascicleLayers({ root, meshes, tl, keyOf }: AnimCtx) {
   const parts = useMemo(() => {
-    const side = (suffix: string) => {
-      const out: { node: Object3D; x: number }[] = [];
-      root.traverse((o) => {
-        const n = o.userData.name as string | undefined;
-        if (n && n.endsWith(suffix) && !n.startsWith("Titin")) out.push({ node: o, x: o.position.x });
-      });
-      return out;
+    root.updateMatrixWorld(true);
+    const centre = new Box3().setFromObject(root).getCenter(new Vector3());
+    const fibers = nodesNamed(root, "Fibers.").map((f) => ({ p: pulsable(f, centre), ms: meshesUnder(f) }));
+    const wraps = ["Perimysium", "Endomysium", "Nerve", "Motor neuron branches"].flatMap((n) => nodesNamed(root, n)).map((n) => pulsable(n, centre));
+    return {
+      fibers,
+      wraps,
+      perimysium: meshesNamed(meshes, keyOf, "Perimysium").map((m) => {
+        const mat = m.material as MeshStandardMaterial;
+        return { m, mat, base: mat.opacity, transparent: mat.transparent, depthWrite: mat.depthWrite };
+      }),
+      endomysium: meshesNamed(meshes, keyOf, "Endomysium"),
     };
-    const titin: { node: Object3D; x: number; sx: number }[] = [];
-    root.traverse((o) => {
-      const n = o.userData.name as string | undefined;
-      if (n && n.startsWith("Titin.")) titin.push({ node: o, x: o.position.x, sx: o.scale.x });
-    });
-    return { left: side(".l"), right: side(".r"), titin };
-  }, [root]);
+  }, [root, meshes, keyOf]);
 
   useFrame(() => {
     const t = tl.t;
-    const c = ramp(t, 0.02, 0.45) * (1 - ramp(t, 0.7, 0.95)); // 0 relaxed → 1 contracted → back
-    const sarcomere = RELAXED_UM - (RELAXED_UM - CONTRACTED_UM) * c;
-    const d = ((RELAXED_UM - sarcomere) / 2) * K_SARC; // each Z disc moves this far toward the M line
-    parts.left.forEach((p) => (p.node.position.x = p.x + d));
-    parts.right.forEach((p) => (p.node.position.x = p.x - d));
-    const k = sarcomere / 2 / (RELAXED_UM / 2); // titin runs Z disc → M line, so it shortens with the half-sarcomere
-    parts.titin.forEach((p) => {
-      p.node.position.x = p.x * k;
-      p.node.scale.x = p.sx * k;
+    // perimysium first; then it turns see-through so the endomysium sleeves inside show
+    const see = ramp(t, 0.2, 0.3) * (1 - ramp(t, 0.9, 1));
+    // (starts from the scene's own look: already see-through for study, so only fades further)
+    parts.perimysium.forEach((p) => {
+      p.mat.transparent = p.transparent || see > 0;
+      p.mat.opacity = p.base * (1 - 0.75 * see);
+      p.mat.depthWrite = p.depthWrite && see < 0.5;
     });
+    glow(
+      parts.perimysium.map((p) => p.m),
+      0.55 * pulse(t, 0, 0.26),
+      WRAP_GLOW,
+    );
+    glow(parts.endomysium, 0.6 * pulse(t, 0.24, 0.52), WRAP_GLOW);
+    // the fibers contract together; the connective tissue shortens with them (it transmits the force)
+    const squeeze = ramp(t, 0.5, 0.62) * (1 - ramp(t, 0.8, 0.94));
+    parts.fibers.forEach((f) => {
+      setScale(f.p, [1 - 0.06 * squeeze, 1 + 0.03 * squeeze]);
+      glow(f.ms, 0.45 * pulse(t, 0.48, 0.84), ACTIVE);
+    });
+    parts.wraps.forEach((w) => setScale(w, [1 - 0.06 * squeeze, 1 + 0.02 * squeeze]));
   });
   return null;
 }
 
-// ---------- fascicle: one motor unit = one motor neuron + the fibers it controls (lecture §8) ----------
-const MOTOR_UNIT = [2, 6, 10, 15]; // fiber numbers, same as MOTOR_UNIT in 3d-source/z2/build_levels.py
+// ---------- myofibril and sarcomere: thin filaments slide toward the M line; filaments keep their length (§12) ----------
+// Each object carries extras from 3d-source/sketchfab/build_v3.py: kind (Z | M | thick | thin | titin), sarc (index),
+// part (left | right for thin filaments), n (sarcomeres in the model), s0 (relaxed sarcomere length, model units).
+// Relaxed 2.5 µm → contracted 2.0 µm: Z discs move toward the M lines, thin filaments ride on their Z disc,
+// thick filaments and M lines stay at the sarcomere centres, titin (Z → M) shortens with the half-sarcomere.
+type Piece = { node: Object3D; kind: string; anchor: (f: number) => number; pos0: number; sx0: number };
+const CONTRACTED = 2.0 / 2.5;
+const myofibrilCurve = (t: number) => ramp(t, 0.2, 0.5) * (1 - ramp(t, 0.72, 0.95));
 
-function MotorUnit({ root, meshes, tl, keyOf, size }: AnimCtx) {
+function MyofibrilContraction({ root, tl, curve = myofibrilCurve }: AnimCtx & { curve?: (t: number) => number }) {
+  const pieces = useMemo(() => {
+    const out: Piece[] = [];
+    root.traverse((o) => {
+      const d = o.userData as { kind?: string; sarc?: number; part?: string; n?: number; s0?: number };
+      if (!d.kind || d.sarc === undefined || !d.n || !d.s0) return;
+      const n = d.n;
+      const s0 = d.s0;
+      const k = d.sarc;
+      const zAt = (j: number, f: number) => (j - n / 2) * s0 * f; // Z disc j (0 … n)
+      const centreAt = (f: number) => (k - (n - 1) / 2) * s0 * f; // middle of sarcomere k
+      const anchor =
+        d.kind === "Z" ? (f: number) => zAt(k, f) : d.kind === "thin" ? (f: number) => zAt(d.part === "left" ? k : k + 1, f) : centreAt;
+      out.push({ node: o, kind: d.kind, anchor, pos0: o.position.x, sx0: o.scale.x });
+    });
+    return out;
+  }, [root]);
+
+  useFrame(() => {
+    const f = 1 - (1 - CONTRACTED) * curve(tl.t);
+    for (const p of pieces) {
+      if (p.kind === "titin") {
+        // titin spans Z disc → M line: scale it about the sarcomere centre with the half-sarcomere
+        p.node.scale.x = p.sx0 * f;
+        p.node.position.x = p.anchor(f) + (p.pos0 - p.anchor(1)) * f;
+      } else p.node.position.x = p.pos0 + (p.anchor(f) - p.anchor(1));
+    }
+  });
+  return null;
+}
+
+// ---------- cardiomyocyte: excitation along the sarcolemma → T-tubules → Ca²⁺ → myofibrils → next cell (§14, §20) ----------
+function CardiomyocyteExcitation({ root, meshes, tl, keyOf, size }: AnimCtx) {
   const parts = useMemo(() => {
-    const start = worldPos(root, keyOf, "anim_nerve_start");
-    const end = worldPos(root, keyOf, "anim_nerve_end");
-    const fibers = nodesNamed(root, "Fibers.");
-    const unit = fibers.filter((f) => MOTOR_UNIT.includes(Number(String(f.userData.name).split(".")[1])));
+    root.updateMatrixWorld(true);
+    const centre = new Box3().setFromObject(root).getCenter(new Vector3());
+    const sr = meshesNamed(meshes, keyOf, "Sarcoplasmic reticulum");
+    const caFrom = sampleVertices(sr, 160);
+    const body = root.children.filter((c) => c.userData.name && !/^(hs_|anim_)/.test(String(c.userData.name)));
     return {
-      start,
-      end,
-      nerve: [...meshesNamed(meshes, keyOf, "Nerve")],
-      branches: meshesNamed(meshes, keyOf, "Motor neuron branches"),
-      unit: unit.map((f) => ({ p: pulsable(f), ms: meshesUnder(f) })),
+      start: worldPos(root, keyOf, "anim_ap_start"),
+      end: worldPos(root, keyOf, "anim_ap_end"),
+      caFrom,
+      caDir: caFrom.map((_, i) => new Vector3(rand(i * 5) - 0.5, rand(i * 5 + 1) - 0.5, rand(i * 5 + 2) - 0.5).normalize()),
+      nodes: body.map((n) => pulsable(n, centre)),
+      sarcolemma: [...meshesNamed(meshes, keyOf, "Sarcolemma"), ...meshesNamed(meshes, keyOf, "Branch")],
+      tTubules: meshesNamed(meshes, keyOf, "T-tubules"),
+      sr,
+      myofibrils: meshesNamed(meshes, keyOf, "Myofibrils"),
+      discs: meshesNamed(meshes, keyOf, "Intercalated discs"),
     };
   }, [root, meshes, keyOf]);
   const ap = useRef<Mesh>(null);
+  const ca = useRef<Points>(null);
+  const caGeo = useParticles(parts.caFrom.length);
+  const dotTex = useDotTexture();
+  const v = useMemo(() => new Vector3(), []);
 
   useFrame(() => {
     const t = tl.t;
+    // the signal arrives through one disc and leaves through the other
+    glow(parts.discs, 0.9 * Math.max(pulse(t, 0, 0.1), pulse(t, 0.86, 0.98)), AP_YELLOW);
     if (ap.current) {
-      ap.current.visible = t < 0.3;
-      ap.current.position.lerpVectors(parts.start, parts.end, ramp(t, 0, 0.28));
+      ap.current.visible = t > 0.02 && t < 0.32;
+      ap.current.position.lerpVectors(parts.start, parts.end, ramp(t, 0.03, 0.3));
     }
-    glow(parts.nerve, 0.4 * pulse(t, 0, 0.32), AP_YELLOW);
-    glow(parts.branches, 0.9 * pulse(t, 0.22, 0.5), AP_YELLOW);
-    // only this neuron's fibers respond — together; the fibers of other motor units stay at rest
-    const squeeze = ramp(t, 0.38, 0.5) * (1 - ramp(t, 0.68, 0.8));
-    parts.unit.forEach((f) => {
-      glow(f.ms, 0.6 * pulse(t, 0.32, 0.8), ACTIVE);
-      setScale(f.p, [1 - 0.06 * squeeze, 1 + 0.04 * squeeze]);
+    glow(parts.sarcolemma, 0.45 * pulse(t, 0.02, 0.34), AP_YELLOW);
+    glow(parts.tTubules, 0.9 * pulse(t, 0.28, 0.55), T_BLUE);
+    glow(parts.sr, 0.6 * pulse(t, 0.48, 0.72), CA_LIME);
+    if (ca.current) {
+      const out = ramp(t, 0.5, 0.75);
+      ca.current.visible = t > 0.5 && t < 0.88;
+      const arr = caGeo.getAttribute("position") as BufferAttribute;
+      parts.caFrom.forEach((p, i) => {
+        v.copy(p).addScaledVector(parts.caDir[i], out * size * 0.04 * (0.4 + rand(i + 3)));
+        arr.setXYZ(i, v.x, v.y, v.z);
+      });
+      arr.needsUpdate = true;
+    }
+    glow(parts.myofibrils, 0.45 * pulse(t, 0.66, 0.92), ACTIVE);
+    const squeeze = ramp(t, 0.7, 0.8) * (1 - ramp(t, 0.86, 0.98));
+    parts.nodes.forEach((n) => setScale(n, [1 - 0.06 * squeeze, 1 + 0.02 * squeeze]));
+  });
+  return (
+    <group>
+      <mesh ref={ap} visible={false}>
+        <sphereGeometry args={[size * 0.02, 16, 12]} />
+        <meshBasicMaterial color={AP_YELLOW} toneMapped={false} />
+      </mesh>
+      <points ref={ca} geometry={caGeo} visible={false}>
+        <pointsMaterial map={dotTex} color={CA_LIME} size={0.2} sizeAttenuation transparent depthWrite={false} blending={AdditiveBlending} />
+      </points>
+    </group>
+  );
+}
+
+// ---------- gut wall: the circular layer squeezes ring after ring, the longitudinal layer shortens (§15.1, §1.1; team doc) ----------
+const GUT_LUMEN = 1.15; // inner radius of the tube in model units (build_gutwall in build_levels.py)
+
+function GutWall({ root, tl }: AnimCtx) {
+  const parts = useMemo(() => {
+    root.updateMatrixWorld(true);
+    const centre = new Box3().setFromObject(root).getCenter(new Vector3());
+    // the tube axis is the model's x axis (y = z = 0); each ring squeezes about that axis, not about its own
+    // (cut-open) box centre
+    const rings = nodesNamed(root, "Circular muscle layer.").map((n) => {
+      const parent = n.parent ?? root;
+      const c = parent.worldToLocal(new Box3().setFromObject(n).getCenter(new Vector3()));
+      return { p: pulsable(n, parent.localToWorld(new Vector3(c.x, 0, 0))), ms: meshesUnder(n), x: c.x };
+    });
+    const xs = rings.map((r) => r.x);
+    return {
+      rings,
+      x0: Math.min(...xs),
+      x1: Math.max(...xs),
+      axisParent: rings[0]?.p.node.parent ?? root,
+      longitudinal: nodesNamed(root, "Longitudinal muscle layer").map((n) => ({ p: pulsable(n, centre), ms: meshesUnder(n) })),
+    };
+  }, [root]);
+  const bolus = useRef<Mesh>(null);
+  const tmp = useMemo(() => new Vector3(), []);
+
+  useFrame(() => {
+    const t = tl.t;
+    // a squeeze travels along the tube (0.15–0.6) and pushes the contents ahead of it
+    const len = parts.x1 - parts.x0;
+    const front = parts.x0 - 0.1 * len + 1.1 * len * ramp(t, 0.15, 0.6);
+    const on = t > 0.12 && t < 0.64;
+    parts.rings.forEach((r) => {
+      const d = (r.x - front) / (len * 0.1);
+      const s = on ? Math.exp(-d * d) : 0;
+      setScale(r.p, [1, 1 - 0.12 * s]); // narrowed but still outside the lining
+      glow(r.ms, 0.5 * s, ACTIVE);
+    });
+    if (bolus.current) {
+      bolus.current.visible = on;
+      parts.axisParent.localToWorld(tmp.set(front + 0.2 * len, 0, 0));
+      bolus.current.position.copy(tmp);
+      bolus.current.scale.setScalar(GUT_LUMEN * 0.75 * parts.axisParent.getWorldScale(tmp).x);
+    }
+    const shorten = ramp(t, 0.6, 0.72) * (1 - ramp(t, 0.84, 0.96));
+    parts.longitudinal.forEach((l) => {
+      setScale(l.p, [1 - 0.08 * shorten, 1]);
+      glow(l.ms, 0.45 * pulse(t, 0.58, 0.88), ACTIVE);
     });
   });
   return (
-    <mesh ref={ap} visible={false}>
-      <sphereGeometry args={[size * 0.02, 16, 12]} />
-      <meshBasicMaterial color={AP_YELLOW} toneMapped={false} />
+    <mesh ref={bolus} visible={false}>
+      <sphereGeometry args={[1, 24, 16]} />
+      <meshStandardMaterial color="#a16207" roughness={0.6} transparent opacity={0.8} />
     </mesh>
   );
+}
+
+// ---------- myofilaments: Ca²⁺ → troponin moves tropomyosin → heads bind, pull, detach, repeat → relaxation (§11) ----------
+// Extras from build_v3.py: thin filament groups (kind "thinfil"), tropomyosin strands (pivot = their filament's axis, so
+// rolling about x moves them off the binding sites), myosin heads (pivot at the neck, axis = tilt that swings the tip
+// along the filament). Rotations go about the stored pivots because mesh compression moves the node origins.
+type Turnable = { node: Object3D; pos0: Vector3; q0: Quaternion; pivot: Vector3; axis: Vector3 };
+const turnable = (o: Object3D, pivot: number[], axis: Vector3): Turnable => ({
+  node: o,
+  pos0: o.position.clone(),
+  q0: o.quaternion.clone(),
+  pivot: new Vector3(...pivot),
+  axis,
+});
+const X_AXIS = new Vector3(1, 0, 0);
+function turn(p: Turnable, angle: number, q: Quaternion, v: Vector3) {
+  q.setFromAxisAngle(p.axis, angle);
+  p.node.position.copy(v.copy(p.pos0).sub(p.pivot).applyQuaternion(q).add(p.pivot));
+  p.node.quaternion.copy(q).multiply(p.q0);
+}
+const CA_ION = new Color("#a3e635");
+const STROKE_DEG = 32;
+
+function MyofilamentCycle({ root, meshes, tl, keyOf, size }: AnimCtx) {
+  const parts = useMemo(() => {
+    const thin: { node: Object3D; x0: number }[] = [];
+    const tropo: (Turnable & { sign: number })[] = [];
+    const heads: Turnable[] = [];
+    root.traverse((o) => {
+      const d = o.userData as { kind?: string; axis?: number[]; pivot?: number[] };
+      if (d.kind === "thinfil") thin.push({ node: o, x0: o.position.x });
+      if (d.kind === "tropomyosin" && d.pivot) tropo.push({ ...turnable(o, d.pivot, X_AXIS), sign: tropo.length % 2 ? 1 : -1 });
+      if (d.kind === "head" && d.axis && d.pivot) heads.push(turnable(o, d.pivot, new Vector3(...d.axis).normalize()));
+    });
+    const troponinC = meshes.filter((m) => keyOf(m) === "Troponin C");
+    root.updateMatrixWorld(true);
+    const caAt = troponinC.flatMap((m) => sampleVertices([m], 2));
+    return {
+      thin,
+      tropo,
+      heads,
+      troponin: meshes.filter((m) => keyOf(m).startsWith("Troponin")),
+      troponinC,
+      headMeshes: meshes.filter((m) => keyOf(m) === "Myosin head"),
+      caAt,
+      caFrom: caAt.map((p, i) => p.clone().add(new Vector3(rand(i) - 0.5, rand(i + 9) - 0.5, rand(i + 17) - 0.5).multiplyScalar(size * 0.25))),
+    };
+  }, [root, meshes, keyOf, size]);
+  const ca = useRef<Points>(null);
+  const caGeo = useParticles(parts.caAt.length);
+  const dotTex = useDotTexture();
+  const q = useMemo(() => new Quaternion(), []);
+  const v = useMemo(() => new Vector3(), []);
+
+  useFrame(() => {
+    const t = tl.t;
+    // Ca²⁺ arrives at troponin C (0.1–0.24) and leaves on relaxation (0.8–0.92)
+    const bound = ramp(t, 0.1, 0.24) * (1 - ramp(t, 0.8, 0.92));
+    if (ca.current) {
+      ca.current.visible = t > 0.08 && t < 0.94;
+      const arr = caGeo.getAttribute("position") as BufferAttribute;
+      parts.caAt.forEach((p, i) => {
+        v.copy(parts.caFrom[i]).lerp(p, bound);
+        arr.setXYZ(i, v.x, v.y, v.z);
+      });
+      arr.needsUpdate = true;
+    }
+    glow(parts.troponinC, 0.9 * bound, CA_ION);
+    glow(parts.troponin.filter((m) => !parts.troponinC.includes(m)), 0.4 * bound, CA_ION);
+    // tropomyosin rolls off the myosin-binding sites while Ca²⁺ is bound
+    parts.tropo.forEach((p) => turn(p, p.sign * 0.22 * bound, q, v));
+    // two cross-bridge cycles: attach → power stroke (heads swing, thin filaments slide toward the M line) → detach → recock
+    let swing = 0;
+    let slide = 0;
+    for (const [a, b] of [
+      [0.26, 0.53],
+      [0.53, 0.8],
+    ]) {
+      const u = (t - a) / (b - a);
+      if (u >= 0 && u < 1) swing = u < 0.25 ? 0 : u < 0.6 ? (u - 0.25) / 0.35 : 1 - (u - 0.6) / 0.4;
+      slide += ramp(t, a + (b - a) * 0.25, a + (b - a) * 0.6);
+    }
+    slide *= 1 - ramp(t, 0.82, 0.97);
+    const attached = t > 0.3 && t < 0.8;
+    parts.heads.forEach((h) => turn(h, (swing * STROKE_DEG * Math.PI) / 180, q, v));
+    glow(parts.headMeshes, attached ? 0.35 + 0.35 * swing : 0, ACTIVE);
+    // thin filaments slide toward the M line (−x in the model) by ~one stroke per cycle
+    parts.thin.forEach((p) => (p.node.position.x = p.x0 - slide * 0.16));
+  });
+  return (
+    <points ref={ca} geometry={caGeo} visible={false}>
+      <pointsMaterial map={dotTex} color={CA_ION} size={0.18} sizeAttenuation transparent depthWrite={false} blending={AdditiveBlending} />
+    </points>
+  );
+}
+
+// ---------- dense bodies: filaments slide and pull the dense bodies together; the network spreads the force (§16) ----------
+// Extras from build_v3.py: every dense body node (kind "db", carrying the thin filaments anchored on it) and every thick
+// filament (kind "thick") has an anchor (model space). The cell shortens and thickens about its centre; anchored nodes
+// only move (filaments keep their length — they slide), the membrane, nucleus and intermediate filaments deform with it.
+const SHORTEN = 0.24;
+const THICKEN = 0.12;
+
+function DenseBodyContraction({ root, meshes, tl }: AnimCtx) {
+  const parts = useMemo(() => {
+    root.updateMatrixWorld(true);
+    const centre = root.localToWorld(new Vector3()); // the cell is centred on the model origin
+    const moving: { node: Object3D; pos0: Vector3; anchor: Vector3 }[] = [];
+    const deform: Pulsable[] = [];
+    root.children.forEach((n) => {
+      const d = n.userData as { kind?: string; anchor?: number[]; name?: string };
+      if ((d.kind === "db" || d.kind === "thick") && d.anchor) moving.push({ node: n, pos0: n.position.clone(), anchor: new Vector3(...d.anchor) });
+      else if (d.name && !/^(hs_|anim_)/.test(d.name)) deform.push(pulsable(n, centre));
+    });
+    const byMat = (name: string) => meshes.filter((m) => (m.material as MeshStandardMaterial).name === name);
+    return {
+      moving,
+      deform,
+      thin: byMat("Thin filament (actin)"),
+      thick: byMat("Thick filament (myosin)"),
+      dense: byMat("Dense body"),
+      membraneDense: byMat("Dense body (membrane)"),
+      inter: byMat("Intermediate filament"),
+    };
+  }, [root, meshes]);
+  const v = useMemo(() => new Vector3(), []);
+
+  useFrame(() => {
+    const t = tl.t;
+    const s = ramp(t, 0.2, 0.45) * (1 - ramp(t, 0.8, 0.95));
+    const kx = 1 - SHORTEN * s;
+    const kr = 1 + THICKEN * s;
+    parts.moving.forEach((m) => {
+      v.set(m.anchor.x * kx, m.anchor.y * kr, m.anchor.z * kr).sub(m.anchor);
+      m.node.position.copy(m.pos0).add(v);
+    });
+    parts.deform.forEach((p) => setScale(p, [kx, kr]));
+    const work = pulse(t, 0.18, 0.82);
+    const spread = pulse(t, 0.45, 0.85);
+    glow(parts.thin, 0.45 * work, ACTIVE);
+    glow(parts.thick, 0.45 * work, ACTIVE);
+    glow(parts.inter, 0.8 * spread, WRAP_GLOW);
+    glow(parts.membraneDense, 0.8 * spread, WRAP_GLOW);
+    glow(parts.dense, 0.6 * spread, WRAP_GLOW);
+  });
+  return null;
+}
+
+// ---------- smooth muscle myofilaments: Ca²⁺ → calmodulin → heads pull → thin filaments slide, dense bodies close in (§16) ----------
+// Extras from build_v3.py: thin-filament groups and dense bodies carry `side` (+1 = anchored on the right dense body,
+// moves −x); myosin heads carry `pivot` + `axis` (their tilt already points along the pull); Ca²⁺ ions carry `target`.
+const SLIDE = 0.3;
+
+function SmoothMyofilamentCycle({ root, meshes, tl, keyOf, size }: AnimCtx) {
+  const parts = useMemo(() => {
+    const sliders: { node: Object3D; x0: number; side: number }[] = [];
+    const heads: Turnable[] = [];
+    const ions: { node: Object3D; pos0: Vector3; from: Vector3 }[] = [];
+    root.traverse((o) => {
+      const d = o.userData as { kind?: string; side?: number; axis?: number[]; pivot?: number[] };
+      if ((d.kind === "thinfil" || d.kind === "db") && d.side) sliders.push({ node: o, x0: o.position.x, side: d.side });
+      if (d.kind === "head" && d.axis && d.pivot) heads.push(turnable(o, d.pivot, new Vector3(...d.axis).normalize()));
+      if (d.kind === "ca") {
+        const i = ions.length;
+        // each ion starts outside the bundle (away from the axis) and flies in to its calmodulin lobe
+        const out = new Vector3(rand(i * 3) - 0.5, rand(i * 3 + 1) - 0.5, rand(i * 3 + 2) - 0.5).multiplyScalar(size * 0.5);
+        ions.push({ node: o, pos0: o.position.clone(), from: out });
+      }
+    });
+    return {
+      sliders,
+      heads,
+      ions,
+      calmodulin: meshes.filter((m) => keyOf(m) === "Calmodulin"),
+      ionMeshes: meshes.filter((m) => keyOf(m) === "Ca ions"),
+      headMeshes: meshes.filter((m) => keyOf(m) === "Myosin head"),
+    };
+  }, [root, meshes, keyOf, size]);
+  const q = useMemo(() => new Quaternion(), []);
+  const v = useMemo(() => new Vector3(), []);
+
+  useFrame(() => {
+    const t = tl.t;
+    // Ca²⁺ comes in and binds calmodulin (0.15–0.32), leaves on relaxation (0.82–0.95)
+    const bound = ramp(t, 0.15, 0.32) * (1 - ramp(t, 0.82, 0.95));
+    parts.ions.forEach((ion) => {
+      ion.node.visible = t > 0.12 && t < 0.97;
+      ion.node.position.copy(ion.pos0).add(v.copy(ion.from).multiplyScalar(1 - bound));
+    });
+    glow(parts.calmodulin, 0.7 * bound, CA_ION);
+    glow(parts.ionMeshes, 0.6, CA_ION);
+    // two cross-bridge cycles while Ca²⁺–calmodulin is on: attach → stroke (filaments slide) → detach → recock
+    let swing = 0;
+    let slide = 0;
+    for (const [a, b] of [
+      [0.4, 0.6],
+      [0.6, 0.8],
+    ]) {
+      const u = (t - a) / (b - a);
+      if (u >= 0 && u < 1) swing = u < 0.2 ? 0 : u < 0.6 ? (u - 0.2) / 0.4 : 1 - (u - 0.6) / 0.4;
+      slide += ramp(t, a + (b - a) * 0.2, a + (b - a) * 0.6);
+    }
+    slide *= 1 - ramp(t, 0.82, 0.97);
+    parts.heads.forEach((h) => turn(h, (swing * STROKE_DEG * Math.PI) / 180, q, v));
+    glow(parts.headMeshes, t > 0.38 && t < 0.8 ? 0.35 + 0.35 * swing : 0, ACTIVE);
+    // thin filaments slide toward the middle, so the dense bodies they hang on come closer
+    parts.sliders.forEach((sl) => (sl.node.position.x = sl.x0 - sl.side * slide * SLIDE * 0.5));
+  });
+  return null;
 }

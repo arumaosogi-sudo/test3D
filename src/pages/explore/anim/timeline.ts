@@ -77,3 +77,6 @@ export const pulse = (t: number, a: number, b: number) => {
   if (t <= a || t >= b) return 0;
   return Math.sin(((t - a) / (b - a)) * Math.PI);
 };
+
+/** Sarcomere level: how far it is contracted (0 relaxed … 1 fully) at t — shared by the 3D scene and the panel readout. */
+export const sarcomereContraction = (t: number) => ramp(t, 0.02, 0.45) * (1 - ramp(t, 0.7, 0.95));

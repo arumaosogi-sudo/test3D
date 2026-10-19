@@ -6,7 +6,8 @@ import { ArrowRightIcon, BookIcon, InfoIcon, XIcon } from "@/components/student/
 import { Spinner } from "@/components/ui";
 import { TOPICS, levelById, topicById, type Hotspot, type LevelId, type TopicId, type ZoomLevel } from "@/content/exploreZoom";
 import { ANIMS } from "@/content/exploreAnims";
-import { AnimPanel } from "./anim/AnimPanel";
+import { partInfo, type PartInfo } from "@/content/exploreParts";
+import { AnimPanel, PendingBadge } from "./anim/AnimPanel";
 import { Timeline } from "./anim/timeline";
 import { hasWebGL, prefersReducedMotion } from "./shared/webgl";
 
@@ -15,10 +16,11 @@ const ZoomScene = lazy(() => import("./zoom/ZoomScene"));
 const FADE_MS = 260;
 
 /**
- * /explore — zoom chains (3D-1 … 3D-4, 3D-7, 3D-10):
- *   Skeletal: Arm · Biceps → Fascicle → Muscle fiber → Myofibril → Sarcomere
- *   Cardiac:  Heart → Cardiac muscle → Sarcomere
- * The sarcomere level hands over to /explore/sarcomere to contract it.
+ * /explore — zoom chains (3D-1 … 3D-4, 3D-7, 3D-10), in the order of the team document (v2):
+ *   Skeletal: Whole muscle → Fascicle → Muscle fiber → Myofibril → Sarcomere → Myofilaments
+ *   Cardiac:  Heart wall → Cardiac muscle tissue → Cardiac muscle cell → Intercalated disc → Myofibril → Sarcomere → Myofilaments
+ *   Smooth:   Gut wall → Smooth muscle tissue → Smooth muscle cell → Dense bodies → Myofilaments
+ * Every level has its own animation (src/content/exploreAnims.ts).
  * Topic and level live in ?topic= & ?level= so the browser back button and shared links work.
  */
 const FOOTNOTE: Record<TopicId, string> = {
@@ -35,6 +37,13 @@ export default function Explore3D() {
   const index = chain.indexOf(level);
   const [selected, setSelected] = useState<string | null>(null);
   const [zoomTarget, setZoomTarget] = useState<string | null>(null);
+  // levels with a second, molecular view (real protein structures) switch with a button over the viewer
+  const [molecular, setMolecular] = useState(false);
+  // every part of the loaded model (reported by the scene), the part last tapped, and "isolate" (fade the rest)
+  const [parts, setParts] = useState<string[]>([]);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [isolate, setIsolate] = useState(false);
+  const [sideTab, setSideTab] = useState<"hotspots" | "parts">("hotspots");
   const [fade, setFade] = useState(false);
   const [webgl] = useState(hasWebGL);
   const [reduced] = useState(prefersReducedMotion);
@@ -57,6 +66,10 @@ export default function Explore3D() {
             setParams(next);
             setSelected(null);
             setZoomTarget(null);
+            setMolecular(false);
+            setParts([]);
+            setPicked(null);
+            setIsolate(false);
             timers.current.push(window.setTimeout(() => setFade(false), 60));
           },
           reduced ? 0 : FADE_MS,
@@ -79,18 +92,31 @@ export default function Explore3D() {
 
   const hotspot = level.hotspots.find((h) => h.id === selected) ?? null;
   const partName = selected?.startsWith("mesh:") ? selected.slice(5) : null;
+  // the tapped part's own text (shown with the hotspot it belongs to, when the names differ)
+  const pickedInfo = picked && (partName === picked || hotspot) ? partInfo(picked, level.id) : null;
+  const clearSelection = () => {
+    setSelected(null);
+    setPicked(null);
+    setIsolate(false);
+  };
+  const choosePart = (key: string) => {
+    const h = level.hotspots.find((x) => x.meshes?.includes(key));
+    setSelected(h ? h.id : `mesh:${key}`);
+    setPicked(key);
+  };
+  const showParts = webgl && !molecular && parts.length > 0;
 
   return (
     <div className="coast-explore coast-sans">
       <StudentPageHeader
         title="3D Explore"
-        subtitle="Zoom from the whole muscle down to the sarcomere."
+        subtitle="Zoom from the whole muscle down to the molecules."
         phoneSubtitle={level.crumb}
         crumbs={[{ to: "/", label: "Home" }, { label: "3D Explore" }]}
         back="/"
       />
 
-      {/* Topic picker (3D-1, 3D-10) — smooth muscle is not built and says so on purpose (3D-11) */}
+      {/* Topic picker (3D-1, 3D-10) — a type still being built shows its status instead of opening (3D-11) */}
       <div role="group" aria-label="Muscle type" className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:mt-5 md:flex-wrap md:px-0">
         {TOPICS.map((t) =>
           t.status === "open" ? (
@@ -173,6 +199,10 @@ export default function Explore3D() {
                     onZoomDone={onZoomDone}
                     reducedMotion={reduced}
                     timeline={timeline}
+                    molecular={molecular}
+                    onPick={setPicked}
+                    onParts={setParts}
+                    isolate={isolate}
                   />
                 </Suspense>
               ) : (
@@ -180,9 +210,32 @@ export default function Explore3D() {
               )}
               {webgl && (
                 <span className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-[var(--c-chip)] px-3 py-1 text-[12px] font-semibold text-[var(--c-text)] shadow-sm ring-1 ring-[var(--c-hair)] backdrop-blur-sm">
-                  <span className="md:hidden">Drag · pinch · tap a number</span>
-                  <span className="hidden md:inline">Drag to rotate · pinch or scroll to zoom · two fingers to pan · tap a number</span>
+                  <span className="md:hidden">Drag · pinch · tap any part</span>
+                  <span className="hidden md:inline">Drag to rotate · scroll to zoom · click any part to see what it is</span>
                 </span>
+              )}
+              {showParts && selected && (
+                <button
+                  type="button"
+                  aria-pressed={isolate}
+                  onClick={() => setIsolate((v) => !v)}
+                  className="coast-chip absolute left-3 top-3 px-3 py-1.5 text-[12.5px] font-bold text-[var(--c-text)] shadow-sm"
+                >
+                  {isolate ? "Show all parts" : "Isolate selection"}
+                </button>
+              )}
+              {webgl && level.molecular && (
+                <button
+                  type="button"
+                  aria-pressed={molecular}
+                  onClick={() => {
+                    setSelected(null);
+                    setMolecular((m) => !m);
+                  }}
+                  className="coast-chip absolute right-3 top-3 px-3 py-1.5 text-[12.5px] font-bold text-[var(--c-text)] shadow-sm"
+                >
+                  {molecular ? "Back to the model" : "Molecular view (PDB)"}
+                </button>
               )}
               {/* fade between levels (3D-3) */}
               <div
@@ -209,20 +262,67 @@ export default function Explore3D() {
 
         <aside className="space-y-5">
           <div className="hidden md:block">
-            <Details hotspot={hotspot} partName={partName} onClose={() => setSelected(null)} onZoom={zoomInto} busy={zoomTarget !== null} />
+            <Details levelId={level.id} hotspot={hotspot} partName={partName} part={pickedInfo} onClose={clearSelection} onZoom={zoomInto} busy={zoomTarget !== null} />
           </div>
-          {level.hotspots.length > 0 && (
-            <section className="coast-card p-5" aria-labelledby="hotspots-title">
-              <h2 id="hotspots-title" className="coast-muted text-[12px] font-extrabold uppercase tracking-[0.1em]">
-                On this level
-              </h2>
+          {(level.hotspots.length > 0 || showParts) && (
+            <section className="coast-card p-5" aria-label="Parts of this level">
+              <div role="tablist" aria-label="List" className="flex gap-1.5">
+                {(
+                  [
+                    ["hotspots", "On this level"],
+                    ...(showParts ? ([["parts", `All parts (${parts.length})`]] as const) : []),
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={sideTab === id || (!showParts && id === "hotspots")}
+                    onClick={() => setSideTab(id)}
+                    className={
+                      "rounded-full px-3 py-1 text-[12px] font-extrabold uppercase tracking-[0.06em] transition-colors " +
+                      (sideTab === id || (!showParts && id === "hotspots") ? "bg-[var(--c-panel)] text-[var(--c-text)]" : "coast-muted hover:bg-[var(--c-bg)]")
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {showParts && sideTab === "parts" ? (
+                <ul className="mt-3 max-h-[420px] space-y-0.5 overflow-y-auto pr-1">
+                  {parts.map((key) => {
+                    const info = partInfo(key, level.id);
+                    const on = picked === key || selected === `mesh:${key}`;
+                    return (
+                      <li key={key}>
+                        <button
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => (on ? clearSelection() : choosePart(key))}
+                          className={
+                            "flex w-full flex-col rounded-xl px-2.5 py-1.5 text-left transition-colors " +
+                            (on ? "bg-[var(--c-panel)]" : "hover:bg-[var(--c-bg)]")
+                          }
+                        >
+                          <span className={"text-[14px] text-[var(--c-text)] " + (on ? "font-bold" : "font-semibold")}>{info.name}</span>
+                          <span className="coast-muted text-[12px]">{info.group}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
               <ul className="mt-3 space-y-1">
                 {level.hotspots.map((h, i) => (
                   <li key={h.id}>
                     <button
                       type="button"
                       aria-pressed={selected === h.id}
-                      onClick={() => setSelected(selected === h.id ? null : h.id)}
+                      onClick={() => {
+                        setPicked(null);
+                        if (selected === h.id) clearSelection();
+                        else setSelected(h.id);
+                      }}
                       className={
                         "flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-[14.5px] transition-colors " +
                         (selected === h.id ? "bg-[var(--c-panel)] font-bold" : "hover:bg-[var(--c-bg)]")
@@ -240,6 +340,7 @@ export default function Explore3D() {
                   </li>
                 ))}
               </ul>
+              )}
             </section>
           )}
           <p className="coast-muted px-1 text-[13px] leading-5">
@@ -252,7 +353,7 @@ export default function Explore3D() {
       {/* Phone: details as a bottom sheet */}
       {(hotspot || partName) && (
         <div className="fixed inset-x-0 bottom-0 z-40 md:hidden">
-          <Details hotspot={hotspot} partName={partName} onClose={() => setSelected(null)} onZoom={zoomInto} busy={zoomTarget !== null} sheet />
+          <Details levelId={level.id} hotspot={hotspot} partName={partName} part={pickedInfo} onClose={clearSelection} onZoom={zoomInto} busy={zoomTarget !== null} sheet />
         </div>
       )}
     </div>
@@ -261,15 +362,20 @@ export default function Explore3D() {
 
 /** Info panel (3D-7): name, what it does, lesson link and — where the chain continues — "Zoom in". */
 function Details({
+  levelId,
   hotspot,
   partName,
+  part,
   onClose,
   onZoom,
   busy,
   sheet = false,
 }: {
+  levelId: string;
   hotspot: Hotspot | null;
   partName: string | null;
+  /** Text of the tapped part itself (when it belongs to the hotspot, or is a part without a hotspot). */
+  part: PartInfo | null;
   onClose: () => void;
   onZoom: (h: Hotspot) => void;
   busy: boolean;
@@ -283,7 +389,7 @@ function Details({
       <div className={box}>
         <p className="coast-muted text-[12px] font-extrabold uppercase tracking-[0.1em]">Info panel</p>
         <p className="mt-2 text-[15px] leading-6 text-[var(--c-text)]">
-          Tap a numbered marker — or a name in the list — to see what it is. Pick one marked “Zoom in” to go one level deeper.
+          Tap any part of the model — or a numbered marker, or a name in the list — to see what it is. Pick one marked “Zoom in” to go one level deeper.
         </p>
       </div>
     );
@@ -299,17 +405,29 @@ function Details({
     </button>
   );
   if (!hotspot) {
+    const info = part ?? partInfo(partName ?? "", levelId);
     return (
-      <section aria-live="polite" className={box}>
+      <section aria-live="polite" aria-label={`${info.name} — details`} className={box}>
         {sheet && <div aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />}
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <p className="coast-muted text-[12px] font-extrabold uppercase tracking-[0.1em]">Part of the model</p>
-            <h2 className="text-[20px] font-extrabold leading-7 text-[var(--c-text)]">{partName}</h2>
-            <p className="coast-muted mt-1 text-[14px]">Shown for context — follow the numbered markers for this lesson.</p>
+            <p className="coast-muted text-[12px] font-extrabold uppercase tracking-[0.1em]">{info.group}</p>
+            <h2 className="text-[22px] font-extrabold leading-7 text-[var(--c-text)]">{info.name}</h2>
           </div>
           {close}
         </div>
+        {info.points.length > 0 ? (
+          <ul className="mt-3 space-y-2 text-[15px] leading-6 text-[var(--c-text)]">
+            {info.points.map((p) => (
+              <li key={p} className="flex gap-2">
+                <span aria-hidden="true" className="mt-[9px] size-1.5 shrink-0 rounded-full bg-[var(--c-accent)]" />
+                <span>{p}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="coast-muted mt-2 text-[14px]">Part of the model.</p>
+        )}
       </section>
     );
   }
@@ -323,6 +441,17 @@ function Details({
         </div>
         {close}
       </div>
+      {part && part.name !== hotspot.name && part.points.length > 0 && (
+        <div className="mt-3 rounded-xl bg-[var(--c-bg)] p-3 ring-1 ring-[var(--c-hair)]">
+          <p className="coast-muted text-[11.5px] font-extrabold uppercase tracking-[0.1em]">You tapped · {part.group}</p>
+          <p className="text-[15px] font-bold text-[var(--c-text)]">{part.name}</p>
+          <ul className="mt-1 space-y-1 text-[14px] leading-5 text-[var(--c-text)]">
+            {part.points.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <ul className="mt-3 space-y-2 text-[15px] leading-6 text-[var(--c-text)]">
         {hotspot.points.map((p) => (
           <li key={p} className="flex gap-2">
@@ -331,6 +460,16 @@ function Details({
           </li>
         ))}
       </ul>
+      {hotspot.pending && hotspot.pending.length > 0 && (
+        <div className="mt-3 rounded-xl bg-amber-400/10 p-3 ring-1 ring-amber-400/40">
+          <PendingBadge />
+          <ul className="mt-2 space-y-1.5 text-[14px] leading-5 text-[var(--c-text)]">
+            {hotspot.pending.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         {hotspot.zoomTo && (
           <button

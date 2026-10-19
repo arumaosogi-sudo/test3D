@@ -17,39 +17,116 @@ const LIBRARIES: { name: string; licence: string; url: string }[] = [
 ];
 
 // 3D models in 3D Explore (requirement 3D-14, rule R7). Derivatives of CC BY-SA work are shared under the same licence.
+const PDB = "PDB data: free of all copyright restrictions (CC0)";
+const TEAM = { label: "This project", url: "https://github.com/arumaosogi-sudo/Seminar_Projest" };
+const pdb = (id: string) => ({ label: `RCSB PDB ${id}`, url: `https://www.rcsb.org/structure/${id}` });
 const MODELS: { model: string; author: string; source: { label: string; url: string }; licence: string; note?: string }[] = [
   {
-    model: "Arm · biceps brachii (16 bones and muscles of the right arm)",
+    model: "Whole muscle — right arm with biceps and triceps brachii",
     author: "Z-Anatomy — Gauthier Kervyn et al., based on BodyParts3D by Kousaku Okubo (DBCLS)",
     source: { label: "github.com/Z-Anatomy", url: "https://github.com/Z-Anatomy/Models-of-human-anatomy" },
     licence: "CC BY-SA 4.0 (BodyParts3D: CC BY-SA 2.1 JP)",
-    note: "Cut from the Z-Anatomy atlas and compressed by the MedicSync team; this adapted model is shared under CC BY-SA 4.0.",
+    note: "Cut from the Z-Anatomy atlas, rigged for the elbow and given an epimysium layer by the MedicSync team; this adapted model is shared under CC BY-SA 4.0.",
   },
   {
-    model: "Heart with the great vessels (atria, ventricles, aorta, pulmonary trunk, superior vena cava, left coronary artery)",
+    model: "Heart wall — heart with the great vessels",
     author: "Z-Anatomy — Gauthier Kervyn et al., based on BodyParts3D by Kousaku Okubo (DBCLS)",
     source: { label: "github.com/Z-Anatomy", url: "https://github.com/Z-Anatomy/Models-of-human-anatomy" },
     licence: "CC BY-SA 4.0 (BodyParts3D: CC BY-SA 2.1 JP)",
-    note: "Cut from the Z-Anatomy atlas and compressed by the MedicSync team; this adapted model is shared under CC BY-SA 4.0.",
+    note: "Cut from the Z-Anatomy atlas and compressed by the MedicSync team, who added the layered block (endocardium · myocardium · epicardium); this adapted model is shared under CC BY-SA 4.0.",
   },
   {
-    model:
-      "Fascicle (with a motor unit), muscle fiber (cutaway, with neuromuscular junction), myofibril, sarcomere, cardiac muscle tissue, smooth muscle tissue and cell; the elbow rig and all animations",
-    author: "MedicSync team (built with a Blender script)",
-    source: { label: "This project", url: "https://github.com/arumaosogi-sudo/Seminar_Projest" },
+    model: "Muscle fiber, myofibril and sarcomere — sarcolemma, endomysium and the arrangement of thick and thin filaments",
+    author: "“Myocyte model” by rgmz2015",
+    source: { label: "Sketchfab", url: "https://sketchfab.com/3d-models/5e18a4489dae49918f156b8c4e13751b" },
+    licence: "CC BY 4.0",
+    note: "Filaments rebuilt to the lecture's proportions (sarcomere 2.5 µm, A band 1.6 µm, thin filament 1.0 µm); NMJ, T-tubules, SR, nuclei, mitochondria, myosin heads and titin added by the MedicSync team.",
+  },
+  {
+    model: "Fascicle — the muscle fibers",
+    author: "“Skeletal Muscle Fibre Anatomy” by _Bonehead14",
+    source: { label: "Sketchfab", url: "https://sketchfab.com/3d-models/a491668e5891445e8e29d6ac4abf41bd" },
+    licence: "CC BY 4.0",
+    note: "Fibers resized and bundled; endomysium, perimysium, blood vessel, nerve and motor unit added by the MedicSync team.",
+  },
+  {
+    model: "Myofilaments (skeletal / cardiac and smooth) — actin, tropomyosin, thick filament and myosin heads",
+    author: "“Sarcomere Model” by rgmz2015",
+    source: { label: "Sketchfab", url: "https://sketchfab.com/3d-models/a0f57ca1a44f4658b515fca5bf2131e5" },
+    licence: "CC BY-NC 4.0 (non-commercial — this is a non-commercial educational project)",
+    note: "Troponin complexes (TnC · TnI · TnT, skeletal/cardiac only), calmodulin with Ca²⁺ (smooth, from PDB 1EXR) and additional myosin heads added by the MedicSync team.",
+  },
+  {
+    model: "Cardiac muscle tissue and cardiomyocyte — branched cell bundles",
+    author: "“Cardiac Muscle Cell Anatomy” by _Bonehead14",
+    source: { label: "Sketchfab", url: "https://sketchfab.com/3d-models/16e33d3b0be74b4c800cb7601fb51dd2" },
+    licence: "CC BY 4.0",
+    note: "Cut into cells with intercalated discs, striations and one central nucleus each; endomysium, capillaries, T-tubules and SR added by the MedicSync team.",
+  },
+  {
+    model: "Smooth muscle tissue, cell, and dense bodies — spindle-shaped cells with their nuclei",
+    author: "“Smooth Muscle Cell” by _Bonehead14",
+    source: { label: "Sketchfab", url: "https://sketchfab.com/3d-models/1525fe1477e34d578836236c6a14f5cf" },
+    licence: "CC BY 4.0",
+    note: "Cells rearranged into a sheet; the dense-body network (dense bodies, thick and thin filaments, intermediate filaments), caveolae, gap junctions, nerve and matrix added by the MedicSync team.",
+  },
+  {
+    model: "Gut wall, heart-wall layers, intercalated-disc membranes, smooth muscle myofilaments (with calmodulin); the elbow rig, everything added to the models above, and all animations",
+    author: "MedicSync team (built with Blender scripts and in code with three.js)",
+    source: TEAM,
     licence: "Made by the team",
   },
   {
-    model: "Thin filament in the cross-bridge view (actin, tropomyosin, troponin C · I · T — one bead per amino acid, Ca²⁺-free and Ca²⁺-bound states)",
+    model: "Skeletal / cardiac myofilaments — thin filament (actin, tropomyosin, troponin C · I · T), Ca²⁺-free and Ca²⁺-bound",
     author: "Yamada Y., Namba K., Fujii T. — Cardiac muscle thin filament structures reveal calcium regulatory mechanism, Nat Commun 11:153 (2020)",
     source: { label: "RCSB PDB 6KN7 / 6KN8", url: "https://www.rcsb.org/structure/6KN8" },
-    licence: "PDB data: free of all copyright restrictions (CC0)",
-    note: "Actin in these entries is alpha skeletal actin; troponin is the cardiac isoform. Myosin heads in that view are schematic.",
+    licence: PDB,
+    note: "Actin in these entries is alpha skeletal actin; troponin is the cardiac isoform.",
+  },
+  {
+    model: "Skeletal / cardiac myofilaments — myosin heads (motor domain, lever arm and light chains)",
+    author: "Fujii T., Namba K. — Structure of actomyosin rigour complex at 5.2 Å resolution and insights into the ATPase cycle mechanism, Nat Commun 8:13969 (2017)",
+    source: pdb("5H53"),
+    licence: PDB,
+    note: "Rabbit skeletal actomyosin; the heads are fitted onto the thin filament by the team. The thick-filament backbone is schematic.",
+  },
+  {
+    model: "Intercalated disc — gap junction channel (connexin-26, two docked connexons)",
+    author: "Maeda S. et al. — Structure of the connexin 26 gap junction channel at 3.5 Å resolution, Nature 458:597 (2009)",
+    source: pdb("2ZW3"),
+    licence: PDB,
+    note: "Membranes and gap widths are schematic.",
+  },
+  {
+    model: "Intercalated disc — desmosomal cadherin (desmocollin-2 / desmoglein-2)",
+    author: "Harrison O.J. et al. — Structural basis of adhesive binding by desmocollins and desmogleins, PNAS 113:7160 (2016)",
+    source: pdb("5J5J"),
+    licence: PDB,
+  },
+  {
+    model: "Smooth muscle myofilaments — F-actin with tropomyosin",
+    author: "von der Ecken J. et al. — Structure of the F-actin–tropomyosin complex, Nature 519:114 (2015); reprocessed in Nature 534:724 (2016)",
+    source: pdb("5JLF"),
+    licence: PDB,
+    note: "Five subunits, repeated along the helix by the team.",
+  },
+  {
+    model: "Smooth muscle myofilaments — smooth muscle myosin motor domain",
+    author: "Dominguez R. et al. — Crystal structure of a vertebrate smooth muscle myosin motor domain and its complex with the essential light chain, Cell 94:559 (1998)",
+    source: pdb("1BR2"),
+    licence: PDB,
+  },
+  {
+    model: "Smooth muscle myofilaments — calmodulin with Ca²⁺",
+    author: "Wilson M.A., Brunger A.T. — The 1.0 Å crystal structure of Ca²⁺-bound calmodulin, J Mol Biol 301:1237 (2000)",
+    source: pdb("1EXR"),
+    licence: PDB,
+    note: "Positions of the molecules relative to each other are schematic.",
   },
   {
     model: "Interactive sarcomere",
     author: "MedicSync team (built in code with three.js)",
-    source: { label: "This project", url: "https://github.com/arumaosogi-sudo/Seminar_Projest" },
+    source: TEAM,
     licence: "Made by the team",
   },
 ];

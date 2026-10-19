@@ -56,7 +56,7 @@ describe("stepIndex", () => {
 });
 
 describe("animation captions (exploreAnims)", () => {
-  it("every animation starts at 0, has increasing step starts below 1 and cites the lecture sheet", () => {
+  it("every animation starts at 0, has increasing step starts below 1 and cites the lecture sheet (or is marked pending)", () => {
     for (const [level, anim] of Object.entries(ANIMS)) {
       const starts = animStarts(anim!);
       expect(starts[0], level).toBe(0);
@@ -64,7 +64,8 @@ describe("animation captions (exploreAnims)", () => {
         expect(s, level).toBeLessThan(1);
         if (i) expect(s, level).toBeGreaterThan(starts[i - 1]);
       });
-      anim!.steps.forEach((s) => expect(s.ref, `${level}: ${s.title}`).toMatch(/§\d/));
+      // a step that rests on the team document only must be flagged so the page shows the "awaiting review" badge
+      anim!.steps.forEach((s) => expect(s.ref, `${level}: ${s.title}`).toMatch(s.pending ? /§\d|team document/ : /§\d/));
       expect(anim!.seconds).toBeGreaterThan(0);
     }
   });
