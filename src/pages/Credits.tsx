@@ -71,7 +71,7 @@ const MODELS: { model: string; author: string; source: { label: string; url: str
     note: "Cells rearranged into a sheet; the dense-body network (dense bodies, thick and thin filaments, intermediate filaments), caveolae, gap junctions, nerve and matrix added by the MedicSync team.",
   },
   {
-    model: "Gut wall, heart-wall layers, intercalated-disc membranes, smooth muscle myofilaments (with calmodulin); the elbow rig, everything added to the models above, and all animations",
+    model: "Gut wall, heart-wall layers, intercalated disc (desmosomes, gap junctions), smooth muscle myofilaments (with calmodulin); the elbow rig, everything added to the models above, and all animations",
     author: "MedicSync team (built with Blender scripts and in code with three.js)",
     source: TEAM,
     licence: "Made by the team",

@@ -110,9 +110,9 @@ export const ANIMS: Partial<Record<LevelId, LevelAnim>> = {
     title: "Electrical and mechanical coupling",
     seconds: 7,
     steps: [
-      { from: 0, title: "Two cells meet", text: "At an intercalated disc two cardiac muscle cells connect end-to-end.", ref: "§14" },
-      { from: 0.15, title: "Ions pass through gap junctions", text: "Gap junction channels let ions and electrical signals pass directly into the neighbouring cell.", ref: "§14" },
-      { from: 0.55, title: "Desmosomes hold on", text: "When the cells contract and pull, desmosomes keep them from separating.", ref: "§14" },
+      { from: 0, title: "Two cells meet", text: "Cardiac muscle cells are joined end-to-end through intercalated discs — specialized regions where adjacent cells connect.", ref: "§14" },
+      { from: 0.15, title: "Ions pass through gap junctions", text: "Gap junctions allow ions and electrical signals to pass between adjacent cells, so cardiac muscle is activated in a coordinated way.", ref: "§14" },
+      { from: 0.55, title: "Desmosomes hold on", text: "Desmosomes strengthen the connection and help prevent the cells from separating during contraction.", ref: "§14" },
     ],
   },
 

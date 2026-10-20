@@ -62,6 +62,7 @@ const VIEW: Partial<Record<LevelId, [number, number, number]>> = {
   smoothcell: [0.35, 0.55, 1],
   densebodies: [0.45, 0.6, 1],
   smoothfilaments: [0.35, 0.4, 1],
+  discs: [0.6, 0.55, 1],
 };
 // Where the camera moves when an animation starts, if the opening view hides the motion (elbow flexion is seen
 // best from the side).
@@ -79,6 +80,7 @@ const FIT: Partial<Record<LevelId, number>> = {
   cardiacmyofibril: 0.78,
   densebodies: 0.66,
   smoothfilaments: 0.75,
+  discs: 0.8,
   filaments: 0.95,
   gutwall: 0.85,
 };

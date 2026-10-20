@@ -65,6 +65,8 @@ export function LevelAnimation({ level, ...ctx }: AnimCtx & { level: LevelId }) 
       return <DenseBodyContraction {...ctx} />;
     case "smoothfilaments":
       return <SmoothMyofilamentCycle {...ctx} />;
+    case "discs":
+      return <DiscCoupling {...ctx} />;
     default:
       return null;
   }
@@ -931,4 +933,61 @@ function SmoothMyofilamentCycle({ root, meshes, tl, keyOf, size }: AnimCtx) {
     parts.sliders.forEach((sl) => (sl.node.position.x = sl.x0 - sl.side * slide * SLIDE * 0.5));
   });
   return null;
+}
+
+// ---------- intercalated disc: signal in cell 1 → ions through the gap junctions → cell 2 → contraction, desmosomes hold (§14) ----------
+// Extras from build_v3.py: cell parts carry `cell` (1 | 2). Empties anim_gj_top_NN / anim_gj_bot_NN mark the two ends
+// of each gap-junction channel (cell 1 lies above the riser, cell 2 below). The disc sits at the model origin.
+const ION_COUNT = 56;
+
+function DiscCoupling({ root, meshes, tl }: AnimCtx) {
+  const parts = useMemo(() => {
+    root.updateMatrixWorld(true);
+    const disc = root.localToWorld(new Vector3());
+    const cells: { p: Pulsable; ms: Mesh[]; cell: number }[] = [];
+    root.children.forEach((n) => {
+      const c = Number(n.userData.cell ?? 0);
+      if (c) cells.push({ p: pulsable(n, disc), ms: meshesUnder(n), cell: c });
+    });
+    const tops = nodesNamed(root, "anim_gj_top_").map((n) => n.getWorldPosition(new Vector3()));
+    const bots = nodesNamed(root, "anim_gj_bot_").map((n) => n.getWorldPosition(new Vector3()));
+    const byKey = (k: string) => meshes.filter((m) => String(m.parent?.userData.name ?? m.userData.name).startsWith(k));
+    return { cells, tops, bots, desmosomes: byKey("Desmosomes"), gaps: byKey("Gap junctions") };
+  }, [root, meshes]);
+  const ions = useRef<Points>(null);
+  const ionGeo = useParticles(ION_COUNT);
+  const dotTex = useDotTexture();
+  const v = useMemo(() => new Vector3(), []);
+
+  useFrame(() => {
+    const t = tl.t;
+    // electrical signal: cell 1 first, then (through the gap junctions) cell 2
+    parts.cells.forEach((c) => {
+      const on = c.cell === 1 ? pulse(t, 0.0, 0.4) : pulse(t, 0.3, 0.62);
+      glow(c.ms, 0.45 * on, AP_YELLOW);
+    });
+    glow(parts.gaps, 0.8 * pulse(t, 0.13, 0.58), GJ);
+    // ions stream through every channel from cell 1 into cell 2
+    const n = parts.tops.length;
+    if (ions.current && n) {
+      ions.current.visible = t > 0.15 && t < 0.56;
+      const arr = ionGeo.getAttribute("position") as BufferAttribute;
+      for (let i = 0; i < ION_COUNT; i++) {
+        const ch = i % n;
+        const phase = ((t - 0.15) / 0.2 + i / ION_COUNT) % 1;
+        v.lerpVectors(parts.tops[ch], parts.bots[ch], phase);
+        arr.setXYZ(i, v.x, v.y, v.z);
+      }
+      arr.needsUpdate = true;
+    }
+    // both cells contract; their far ends move in while the disc holds (desmosomes)
+    const squeeze = ramp(t, 0.56, 0.7) * (1 - ramp(t, 0.86, 0.98));
+    parts.cells.forEach((c) => setScale(c.p, [1 - 0.08 * squeeze, 1 + 0.02 * squeeze]));
+    glow(parts.desmosomes, 0.9 * pulse(t, 0.55, 0.95), WRAP_GLOW);
+  });
+  return (
+    <points ref={ions} geometry={ionGeo} visible={false}>
+      <pointsMaterial map={dotTex} color={AP_YELLOW} size={0.12} sizeAttenuation transparent depthWrite={false} depthTest={false} blending={AdditiveBlending} />
+    </points>
+  );
 }
