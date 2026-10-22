@@ -1,98 +1,61 @@
-# 💪 Digital Muscle — Web Games and Virtual Muscle Model
+# Digital Muscle — ส่วน 3D Explore (สำหรับนำไปใส่เว็บจริง)
 
-เว็บแอปสื่อการเรียนรู้เรื่องระบบกล้ามเนื้อ (พัฒนาจาก **Key Point Book 1: The skeletal muscle** ของ ผศ.ดร.กีรกานต์ สมสวน, มฟล.)
-วิชา 1305394 Seminar in Software Engineering · ทีม **MedicSync**
+Repo นี้เก็บ **เฉพาะไฟล์ส่วน 3D** ของเว็บ Digital Muscle (Seminar_Projest) — วางทับที่ path เดิมในโปรเจกต์เว็บจริงได้เลย
+โค้ดทั้งเว็บ (ฉบับที่ใช้พัฒนาและทดสอบส่วน 3D) อยู่ใน branch [`full-app`](../../tree/full-app)
 
-นักศึกษาสแกน QR ของ Section → Sign in ด้วย Google (@lamduan.mfu.ac.th) → หน้า Home 3 เมนู (**Games · 3D Explore · Tests**)
-อาจารย์ใช้ **Admin dashboard** จัดการ Section/QR, สร้างข้อสอบแบบ Google Form, ดูผล Pretest/Posttest และ Export Excel
+## มีอะไรบ้าง
 
----
-
-## 🚀 เริ่มใช้งานบนเครื่อง (ไม่ต้องมีบัญชี Cloudflare)
-
-ต้องมี **Node.js 22+** และ Git
-
-```bash
-npm install
-cp .dev.vars.example .dev.vars      # Windows PowerShell: Copy-Item .dev.vars.example .dev.vars
-npm run db:reset                    # สร้างฐานข้อมูล local + ข้อมูลตัวอย่าง
-npm run dev                         # เปิด http://localhost:5173
-```
-
-> ถ้า npm เตือนเรื่อง install scripts ของ `workerd` / `esbuild` ให้รัน `npm approve-scripts workerd esbuild` แล้ว `npm rebuild workerd esbuild`
-
-**Login ตอนพัฒนา (dev mode — ใช้ได้เฉพาะในเครื่อง):**
-
-| บทบาท | วิธี |
+| Path | เนื้อหา |
 |---|---|
-| นักศึกษา | เปิด `http://localhost:5173/join/MUS-4K7P` (Section 1) → พิมพ์อีเมลแบบ `6531501234@lamduan.mfu.ac.th` ในกล่อง *Developer mode* |
-| อาจารย์ | เปิด `http://localhost:5173/admin/login` (หรือกดลิงก์ *For instructors →* ใต้การ์ด Sign in) → ใช้ **username / password** ที่ตั้งใน `.dev.vars` หรือพิมพ์ `instructor@mfu.ac.th` ในกล่อง *Developer mode* |
+| `src/pages/explore/` | หน้า `/explore` (Explore3D) และ `/explore/sarcomere`, ฉาก 3D, แอนิเมชัน, ฉากโมเลกุล PDB |
+| `src/content/explore.ts` | ชิ้นส่วน sarcomere (ข้อความ) |
+| `src/content/exploreZoom.ts` | ลำดับระดับของกล้ามเนื้อ 3 ชนิด, จุดหมายเลข (hotspots), เครดิตแต่ละระดับ |
+| `src/content/exploreAnims.ts` | คำบรรยายแอนิเมชันแต่ละขั้น (อ้างอิง lecture sheet §) |
+| `src/content/exploreParts.ts` | ชื่อ + คำอธิบายของทุกชิ้นส่วนที่คลิกได้ |
+| `public/models/` | โมเดล `.glb` (บีบด้วย meshopt) และข้อมูลโปรตีน `.json` |
+| `src/pages/Credits.tsx` | หน้า `/credits` ที่เพิ่มเครดิตโมเดล 3D ทุกตัว (ต้องใช้แทนของเดิม — license กำหนด) |
 
-**บัญชีอาจารย์แบบ username / password** (ใช้ไปก่อนจนกว่าอาจารย์จะ login ด้วย Google ได้):
+ไม่มีไฟล์ไหนในเว็บจริงที่ต้องลบ (เทียบกับ Seminar_Projest `main` ที่ commit `2dc542e`)
 
+## วิธีใส่เข้าเว็บจริง
+
+### แบบที่ 1 — ใช้ git (แนะนำ)
+ในโฟลเดอร์โปรเจกต์เว็บจริง:
 ```bash
-npm run admin:hash                  # พิมพ์รหัสผ่าน (ไม่แสดงบนจอ) → ได้ค่า hash
+git remote add test3d https://github.com/arumaosogi-sudo/test3D.git
+git fetch test3d
+git checkout test3d/main -- src/pages/explore src/content/explore.ts src/content/exploreZoom.ts src/content/exploreAnims.ts src/content/exploreParts.ts public/models src/pages/Credits.tsx
+npm install -D r3f-perf@^7.2.3
 ```
 
-ใส่ใน `.dev.vars`: `ADMIN_USERNAME=...` และ `ADMIN_PASSWORD_HASH=<hash>` แล้วรีสตาร์ต `npm run dev` · **ห้ามเก็บรหัสผ่านจริงไว้ในไฟล์ใด ๆ** · ผิดเกิน 5 ครั้ง/15 นาที จะถูกล็อกชั่วคราว
-
-เมื่อได้ **Google OAuth Client ID** แล้ว (ขั้นตอน: `docs/GOOGLE_SIGNIN.md`) ใส่ใน `GOOGLE_CLIENT_ID` (`.dev.vars` ตอน dev / `wrangler.jsonc` ตอน deploy) ปุ่ม *Sign in with Google* จะใช้ได้ทันที
-
-## 🧰 คำสั่ง
-
-| คำสั่ง | ทำอะไร |
-|---|---|
-| `npm run dev` | Vite + Worker API + D1 local ในคำสั่งเดียว |
-| `npm run build` | type-check + build production |
-| `npm test` | unit tests (Vitest) |
-| `npm run db:reset` | ลบฐานข้อมูล local แล้วสร้างใหม่ + seed |
-| `npm run db:migrate` | apply migration ใหม่กับฐานข้อมูล local |
-| `npm run admin:hash` | สร้าง hash รหัสผ่านของบัญชีอาจารย์ (ADMIN_PASSWORD_HASH) |
-| `npm run cf-typegen` | สร้าง type ของ Env ใหม่หลังแก้ `wrangler.jsonc` |
-| `npm run deploy` | build + deploy ขึ้น Cloudflare (ต้อง `wrangler login` และสร้าง D1 ก่อน — ดูด้านล่าง) |
-
-## 📁 โครงสร้าง
-
-```
-docs/plan/            ⚖️ ข้อบังคับ + requirement + stack + แผนงาน (อ่านก่อนเริ่มงาน)
-docs/ARCHITECTURE.md  สัญญา API, กติกา auth/ข้อสอบ, endpoint ทั้งหมด
-docs/DESIGN_NOTES.md  ค่าจาก Figma (สี ขนาด ฟอนต์ layout) + ข้อแตกต่างที่ตั้งใจ — อ่านก่อนทำหน้าใหม่
-docs/TEAMMATE_GUIDE.md คู่มือสำหรับเพื่อนในทีมที่รับทำหน้า Games / 3D
-shared/contract.ts    type + zod schema ที่ frontend และ API ใช้ร่วมกัน
-migrations/           schema ของ D1
-worker/               API (Cloudflare Worker + Hono)
-src/                  React app
-  pages/              Login, Join, Onboarding, Home, Credits, Privacy
-  pages/admin/        หน้าอาจารย์ทั้งหมด
-  pages/games/        🧩 เพื่อนในทีม (placeholder)
-  pages/explore/      🧩 เพื่อนในทีม (placeholder)
-  pages/tests/        ✅ Tests: รายการ / ทำข้อสอบ / ผลสอบ
-```
-
-## 👥 แบ่งงาน
-
-| ส่วน | ผู้รับผิดชอบ | สถานะ |
-|---|---|---|
-| Login / Join QR / Onboarding, ฐานข้อมูล, API ทั้งหมด (รวม API ทำข้อสอบ + ตรวจคะแนน), Home, Admin ทุกหน้า | nitiphum01 | ✅ รอบแรกเสร็จ |
-| Games (Balloon Pop, Group Sort, Diameter, Result) | เพื่อนในทีม | 🧩 placeholder |
-| 3D Explore + Sarcomere | เพื่อนในทีม | 🧩 placeholder |
-| หน้า Tests: รายการ / ทำข้อสอบ / ผลสอบ | nitiphum01 | ✅ เสร็จ (7 ต.ค. 2026) |
-
-## ☁️ Deploy ขึ้น Cloudflare
-
-เว็บจริง: **https://digital-muscle.arumaosogi.workers.dev**
-
+### แบบที่ 2 — คัดลอกไฟล์
+ดาวน์โหลด ZIP ของ repo นี้ แล้วคัดลอกโฟลเดอร์ `src/` และ `public/` ทับลงในโปรเจกต์เว็บจริง (path ตรงกัน) จากนั้น
 ```bash
-npx wrangler login
-npx wrangler d1 create digital-muscle-db      # นำ database_id ที่ได้ไปใส่ใน wrangler.jsonc
-npm run db:migrate:remote
-npx wrangler secret put SESSION_SECRET        # สุ่มข้อความยาว ≥ 32 ตัวอักษร
-npx wrangler secret put ADMIN_USERNAME        # ชื่อผู้ใช้อาจารย์
-npx wrangler secret put ADMIN_PASSWORD_HASH   # ค่าจาก npm run admin:hash
-npm run deploy
+npm install -D r3f-perf@^7.2.3
 ```
 
-ตั้งค่า `GOOGLE_CLIENT_ID` และ `ADMIN_EMAILS` ใน `wrangler.jsonc` → `vars` · **ห้ามตั้ง `DEV_LOGIN` บน production**
+### ตรวจหลังใส่
+```bash
+npm run lint
+npm test
+npm run build
+npm run dev
+```
+เปิด `http://localhost:5173/explore` — ลองทั้ง 3 ชนิด (Skeletal / Cardiac / Smooth), กด Play, คลิกชิ้นส่วน, แท็บ All parts
 
-## 🔒 ข้อมูลส่วนบุคคล (PDPA)
-เก็บเฉพาะ Student ID, ชื่อต้น, อีเมลมหาวิทยาลัย และคำตอบ/คะแนน · อาจารย์ Withdraw / Archive / Anonymize / Delete ได้จากหน้า Students
+## สิ่งที่เว็บจริงต้องมีอยู่แล้ว (มีใน Seminar_Projest)
+- route `explore` และ `explore/sarcomere` ใน `src/router.tsx`
+- `three ^0.186.1`, `@react-three/fiber ^9.8.1`, `@react-three/drei ^10.7.9`, `@types/three ^0.186.0`
+- `@/components/student/icons`, `StudentPageHeader`, `useDocumentTitle`, `@/components/ui` (Spinner) และ CSS class `coast-*`
+- **เพิ่มใหม่:** `r3f-perf ^7.2.3` (devDependency — ใช้วัด fps ด้วย `?perf` ตอน dev เท่านั้น ไม่เข้า production bundle
+  แต่ต้องติดตั้งไว้ ไม่งั้น `npm run dev` จะหา import ไม่เจอ)
+
+## License ของโมเดล
+เครดิตแสดงใต้โมเดลทุกระดับ และในหน้า `/credits`
+- Sketchfab (CC BY 4.0): Myocyte model (rgmz2015), Skeletal Muscle Fibre Anatomy / Cardiac Muscle Cell Anatomy / Smooth Muscle Cell (_Bonehead14)
+- Sketchfab **CC BY-NC 4.0**: Sarcomere Model (rgmz2015) — ใช้ได้เฉพาะงานที่ไม่ใช่เชิงพาณิชย์
+- Z-Anatomy (CC BY-SA 4.0) — แขนและหัวใจ
+- RCSB PDB (CC0) — ฉาก Molecular view
+- โมเดลที่ทีมสร้างเอง: gut wall, intercalated disc, dense bodies, smooth muscle myofilaments และทุกอย่างที่เติมลงในโมเดลข้างต้น
+
+ไฟล์ต้นฉบับ Blender และสคริปต์สร้างโมเดล (`build_v3.py`) ไม่ได้อยู่ใน repo นี้ (อยู่ในเครื่องที่พัฒนา: `3d-source/`)
